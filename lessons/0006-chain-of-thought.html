@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 0006 — Chain-of-thought</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+
+<p class="kicker">Lesson 0006 · Phase 2: Core patterns · ~10 minutes</p>
+<h1>Chain-of-thought</h1>
+<p class="subtitle">Intermediate steps as test-time compute. What the paper actually claimed.</p>
+
+<div class="win">
+<strong>Your one win today</strong>
+State Wei et al.’s claim without folklore: CoT is few-shot exemplars of intermediate reasoning, it helps <em>sufficiently large</em> models, and it is the substrate under every agent that “thinks out loud.”
+</div>
+
+<h2>1 · What the paper is</h2>
+
+<p><em>Chain-of-Thought Prompting Elicits Reasoning in Large Language Models</em> (Wei, Wang, Schuurmans, Bosma, Ichter, Xia, Chi, Le, Zhou — NeurIPS 2022).<a class="cite" href="https://arxiv.org/abs/2201.11903">[1]</a></p>
+
+<div class="def">
+<span class="label">Chain of thought</span>
+A series of intermediate natural-language reasoning steps that lead to a final answer — the model “shows its work” in words before giving the answer. CoT prompting = a handful of in-prompt examples (exemplars) of the form ⟨input, chain of thought, output⟩. It is a prompting technique, not a new architecture.
+</div>
+
+<p>Now see what a chain of thought actually looks like. A CoT exemplar is a ⟨input, chain of thought, output⟩ triple — a question, the model’s written-out working, then the answer. Here is a real example from the paper’s GSM8K set, shown as it would sit in the prompt:</p>
+
+<pre><code>Q: Natalia sold clips to 48 of her friends in April, and then
+   she sold half as many clips in May. How many clips did she
+   sell in total during April and May?
+
+A: Natalia sold 48/2 = 24 clips in May.
+   Natalia sold 48 + 24 = 72 clips total during April and May.
+   Answer: 72</code></pre>
+
+<p>Without CoT, the same exemplar is just the question and the bare answer “72” — no working at all. The chain (the two arithmetic steps in the middle) is the entire difference: the model reads a handful of examples where the working is shown, so it learns to write its own working out before it answers.</p>
+
+<p>The empirical headline, in plain terms: give the large model a handful of worked examples where the intermediate steps are written out, and it gets dramatically better at math word problems (GSM8K). PaLM 540B with eight such examples hit the then-state-of-the-art score, beating even a finetuned GPT-3 that used a verifier to check its work. The same lift showed up on arithmetic, commonsense, and symbolic tasks — not just math.<a class="cite" href="https://arxiv.org/abs/2201.11903">[1]</a></p>
+
+<p>Why it works, in the paper’s own framing:</p>
+<ol class="steps">
+<li><strong>Hard problems have steps.</strong> A multi-step problem is a chain of smaller decisions. Writing the steps out spends extra tokens — that spending is “test-time compute,” and it is the thing that buys the accuracy lift.</li>
+<li><strong>You can read where it went wrong.</strong> The chain is a window into the model’s reasoning: you can see the step where it made a mistake. (Caveat: you see the written steps, not the model’s internal activations. “Interpretable” here means inspectable, not fully transparent.)</li>
+<li><strong>Language is the medium.</strong> In principle it applies to any task a human can solve by talking it through in words.</li>
+<li><strong>Nothing to retrain.</strong> The behavior is drawn out of an off-the-shelf large model with in-prompt examples. No finetune, no new architecture.</li>
+</ol>
+
+<h2>2 · What the paper is not</h2>
+
+<p>Three pieces of folklore to kill now, because interviews punish them.</p>
+<ul>
+<li><strong>Not “let’s think step by step.”</strong> That zero-shot trigger is Kojima et al. 2022, a different paper. Wei et al. used few-shot worked examples.</li>
+<li><strong>Not free, not universal.</strong> The original paper described CoT as an <em>emergent ability of scale</em> — it showed up only in large models. Small models, asked to write out steps, produced chains that read smoothly but were illogical, and CoT could actually <em>make them worse</em>. Modern frontier models have moved that size threshold, but the lesson still holds: pasting CoT onto a tiny local model and expecting state-of-the-art math is a mistake.<a class="cite" href="https://arxiv.org/abs/2201.11903">[1]</a></li>
+<li><strong>Not grounded.</strong> CoT reasons inside the model’s weights. If a fact is missing or stale, the chain will still sound sure. That failure is why the next lesson exists.</li>
+</ul>
+
+<h2>3 · Why agents care</h2>
+
+<p>CoT is the thing every later pattern is built from. Each one spends tokens on intermediate text on purpose: ReAct (0007) weaves CoT steps between tool actions, so the model reasons about what to do next after seeing a result. Reflexion (0008) is CoT pointed back at a failed attempt, so the model narrates what went wrong and tries again. The “reasoning models” of 2025–26 are CoT that has been trained to run longer before it answers.<a class="cite" href="https://simonwillison.net/guides/agentic-engineering-patterns/how-coding-agents-work/">[2]</a> Think of CoT as the substrate — the material all of these patterns are made of. You are not learning a one-off trick; you are learning the material.</p>
+
+<div class="interview">
+<span class="label">Interview angle</span>
+“Why have the model think out loud?” Strong: CoT allocates test-time compute to intermediate steps; it is also the only human-readable trace of a decision. Weak: “it makes the model smarter.” Name Wei et al., name the scale caveat, name the grounding limit that ReAct fixes.
+</div>
+
+<h2>4 · Test-time compute, after the paper</h2>
+
+<p>Wei et al. bought extra thinking by pasting worked examples into the prompt. Since 2025 the same idea usually takes the form of a <span class="strong">thinking budget</span>: the model itself is trained to generate a long internal chain of thought before it answers, and the product charges or meters that chain as test-time compute. Same underlying idea — spend more tokens before committing to an answer — delivered in a different way. Three distinctions interviewers now check:<a class="cite" href="https://lilianweng.github.io/posts/2025-05-01-thinking/">[3]</a></p>
+<ul>
+<li><strong>Few-shot CoT</strong> (this paper): the steps live in the prompt, as examples you wrote. You can read every one of them. No extra training.</li>
+<li><strong>A reasoning model’s trace:</strong> the steps are generated by the model, often trained into it, and sometimes hidden or summarized from you. It is still just tokens sampled before the answer. It is not an example you pasted in.</li>
+<li><strong>Neither is grounded:</strong> a longer trace does not fetch a missing fact. That limit is unchanged in both cases, and it is the gap that lesson 0007 (tools) fills.</li>
+</ul>
+
+<p>Say the cost out loud: you are buying accuracy on hard items by paying, on every item that thinks, more tokens and more latency. That trade is fine when the item is genuinely hard. It is a mistake for a simple lookup a tool should have done — do not turn a thinking budget on for something a single tool call would answer.</p>
+
+<h2>5 · Retrieval practice</h2>
+
+<div class="quiz">
+
+<div class="q" data-ans="1">
+<p class="qtext">1. In Wei et al., chain-of-thought prompting means…</p>
+<label><input type="radio" name="q1"> Finetuning on a dataset of equations with a verifier head.</label>
+<label class="ans"><input type="radio" name="q1"> Few-shot exemplars that include intermediate reasoning steps.</label>
+<label><input type="radio" name="q1"> A special decoding mode that samples only numeric tokens.</label>
+<div class="feedback ok">Correct. ⟨input, chain, output⟩ exemplars in the prompt. No new weights, no special decoder.</div>
+<div class="feedback no">The paper's method is prompting with worked examples, not finetuning or a numeric decoder. Option 2.</div>
+</div>
+
+<div class="q" data-ans="2">
+<p class="qtext">2. A real limit of CoT, as later used against it by ReAct?</p>
+<label><input type="radio" name="q2"> It cannot be written in English; it requires a formal language.</label>
+<label><input type="radio" name="q2"> It only works on models smaller than one billion parameters.</label>
+<label class="ans"><input type="radio" name="q2"> The chain is ungrounded — it cannot fetch missing facts.</label>
+<div class="feedback ok">Correct. CoT is a static black box over internal knowledge. That is the gap ReAct fills with actions.</div>
+<div class="feedback no">CoT is English (or any language), and the original claim was it helps *large* models. The limit is grounding. Option 3.</div>
+</div>
+
+<div class="q" data-ans="0">
+<p class="qtext">3. “Let’s think step by step” with no exemplars is…</p>
+<label class="ans"><input type="radio" name="q3"> Zero-shot CoT (Kojima et al.), not the Wei et al. method.</label>
+<label><input type="radio" name="q3"> Exactly the protocol of the 2022 NeurIPS CoT paper.</label>
+<label><input type="radio" name="q3"> Illegal under the GSM8K benchmark's original rules.</label>
+<div class="feedback ok">Correct. Cite the right paper. Wei = few-shot worked examples. Kojima = zero-shot trigger. Both exist; they are not the same claim.</div>
+<div class="feedback no">Wei et al. used few-shot exemplars. The zero-shot trigger is a later, different result. Option 1.</div>
+</div>
+
+<div class="q" data-ans="2">
+<p class="qtext">4. A 2025 “reasoning model” thinking trace differs from Wei et al. how?</p>
+<label><input type="radio" name="q4"> It is a database lookup, so the chain is grounded by definition.</label>
+<label><input type="radio" name="q4"> It is the same object: eight handwritten GSM8K exemplars in the prompt.</label>
+<label class="ans"><input type="radio" name="q4"> It is extra sampled tokens before the answer, often trained and sometimes hidden — not exemplars you pasted.</label>
+<div class="feedback ok">Correct. Same family (test-time compute), different mechanism. Still ungrounded. Tools remain lesson 0007.</div>
+<div class="feedback no">Not retrieval, and not Wei’s few-shot paste. A trained or metered trace. Option 3.</div>
+</div>
+
+</div>
+
+<h2>6 · Read next (primary source)</h2>
+
+<p><a href="https://arxiv.org/pdf/2201.11903">Wei et al. — CoT paper, PDF</a>. Read the abstract, §1, and §2 (about 12 minutes). Skip the tables on a first pass; you need the claim, not GSM8K decimals. Then <a href="https://lilianweng.github.io/posts/2025-05-01-thinking/">Weng — Why We Think</a> (1 May 2025) for what “thinking” became after the paper.</p>
+
+<h2>7 · Lock it in</h2>
+<ul>
+<li>Write, from memory: “CoT = few-shot intermediate steps; helps large models; ungrounded.”</li>
+<li>New glossary terms: <em>chain of thought</em>, <em>test-time compute</em>, <em>exemplar</em>.</li>
+</ul>
+
+<p class="reminder">On paper: one question where a chain of thought invents a date, then the same question with a tool observation that corrects it. That is the gap before ReAct.</p>
+
+<nav class="lessons-nav">
+<span><a href="./0005-tool-design.html">← 0005 Tool design</a></span>
+<span><a href="./0007-react.html">0007 ReAct →</a></span>
+</nav>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
